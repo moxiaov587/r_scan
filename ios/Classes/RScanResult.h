@@ -7,8 +7,8 @@
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
-#import "ZXingObjC/ZXingObjC.h"
-#import "ZBarSDK/ZBarSDK.h"
+#import "ZXingObjC.h"
+
 @interface RScanResult : NSObject
 
 +(NSDictionary*) toMap:(AVMetadataMachineReadableCodeObject*) obj;
@@ -17,6 +17,6 @@
 
 +(NSNumber*) getZXingType:(ZXBarcodeFormat)format;
 
-+(NSNumber*) getZBarType:(zbar_symbol_type_t)format;
+
 @end
 
