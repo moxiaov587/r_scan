@@ -5,43 +5,142 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
-export 'package:r_scan/src/r_scan_view.dart';
+import 'package:meta/meta.dart';
 export 'package:r_scan/src/r_scan_camera.dart';
 
-/// qr scan
+/// Qr code scan
 class RScan {
-  static const MethodChannel _channel =
-      const MethodChannel('com.rhyme_lph/r_scan');
+  static const MethodChannel _channel = MethodChannel('com.rhyme_lph/r_scan');
 
-  /// scan qr image in path
+  /// Scan qr image in path
   ///
   /// [path] your qr image path
   ///
-  /// It will return your scan result.if not found qr,will return empty.
-  static Future<RScanResult> scanImagePath(String path) async =>
-      RScanResult.formMap(await _channel.invokeMethod('scanImagePath', {
-        "path": path,
-      }));
+  /// It will return your scan result.
+  /// If not found qr, will return null.
+  static Future<RScanResult?> scanImagePath(String path) async {
+    final Map<dynamic, dynamic>? result = await _channel.invokeMethod(
+      'scanImagePath',
+      <String, dynamic>{'path': path},
+    );
+    if (result != null) {
+      return RScanResult.formMap(result);
+    } else {
+      return null;
+    }
+  }
 
   /// scan qr image in url
   ///
   /// [url] your qr image url
   ///
-  /// It will return your scan result.if not found qr,will return empty.
-  static Future<RScanResult> scanImageUrl(String url) async =>
-      RScanResult.formMap(await _channel.invokeMethod('scanImageUrl', {
-        "url": url,
-      }));
+  /// It will return your scan result.
+  /// If not found qr, will return null.
+  static Future<RScanResult?> scanImageUrl(String url) async {
+    final Map<dynamic, dynamic>? result = await _channel.invokeMethod(
+      'scanImageUrl',
+      <String, dynamic>{'url': url},
+    );
+    if (result != null) {
+      return RScanResult.formMap(result);
+    } else {
+      return null;
+    }
+  }
 
   /// scan qr image in memory
   ///
   /// [uint8list] your qr image memory
   ///
-  /// It will return your scan result.if not found qr,will return empty.
-  static Future<RScanResult> scanImageMemory(Uint8List uint8list) async =>
-      RScanResult.formMap(await _channel.invokeMethod('scanImageMemory', {
-        "uint8list": uint8list,
-      }));
+  /// It will return your scan result.
+  /// If not found qr, will return null.
+  static Future<RScanResult?> scanImageMemory(Uint8List uint8list) async {
+    final Map<dynamic, dynamic>? result = await _channel.invokeMethod(
+      'scanImageMemory',
+      <String, dynamic>{'uint8list': uint8list},
+    );
+    if (result != null) {
+      return RScanResult.formMap(result);
+    } else {
+      return null;
+    }
+  }
+}
+
+/// Barcode point
+@immutable
+class RScanPoint {
+  const RScanPoint(this.x, this.y);
+
+  /// barcode point x
+  final double x;
+
+  /// barcode point y
+  final double y;
+
+  @override
+  String toString() => 'RScanPoint {x: $x, y: $y}';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RScanPoint &&
+          runtimeType == other.runtimeType &&
+          x == other.x &&
+          y == other.y;
+
+  @override
+  int get hashCode => x.hashCode ^ y.hashCode;
+}
+
+/// scan result
+@immutable
+class RScanResult {
+  const RScanResult({this.type, this.message, this.points});
+
+  factory RScanResult.formMap(Map<dynamic, dynamic> map) {
+    return RScanResult(
+      type:
+          map['type'] != null ? RScanBarType.values[map['type'] as int] : null,
+      message: map['message'] as String,
+      points: map['points'] != null
+          ? (map['points'] as List<dynamic>)
+              .map(
+                (dynamic data) => RScanPoint(
+                  data['X'] as double,
+                  data['Y'] as double,
+                ),
+              )
+              .toList()
+          : null,
+    );
+  }
+
+  /// barcode type
+  final RScanBarType? type;
+
+  ///barcode message
+  final String? message;
+
+  ///barcode points
+  final List<RScanPoint>? points;
+
+  @override
+  String toString() {
+    return 'RScanResult {type: $type, message: $message, points: $points}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RScanResult &&
+          runtimeType == other.runtimeType &&
+          type == other.type &&
+          message == other.message &&
+          points == other.points;
+
+  @override
+  int get hashCode => type.hashCode ^ message.hashCode ^ points.hashCode;
 }
 
 /// barcode type
@@ -63,83 +162,4 @@ enum RScanBarType {
   upc_a, // ios not found
   upc_e,
   upc_ean_extension, // ios not found
-}
-
-/// barcode point
-class RScanPoint {
-  /// barcode point x
-  final double x;
-
-  /// barcode point y
-  final double y;
-
-  RScanPoint(this.x, this.y);
-
-  @override
-  String toString() {
-    return 'RScanPoint{x: $x, y: $y}';
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RScanPoint &&
-          runtimeType == other.runtimeType &&
-          x == other.x &&
-          y == other.y;
-
-  @override
-  int get hashCode => x.hashCode ^ y.hashCode;
-}
-
-/// scan result
-class RScanResult {
-  /// barcode type
-  final RScanBarType type;
-
-  ///barcode message
-  final String message;
-
-  ///barcode points
-  final List<RScanPoint> points;
-
-  const RScanResult({this.type, this.message, this.points});
-
-  factory RScanResult.formMap(Map map) {
-    return map == null
-        ? null
-        : RScanResult(
-            type: map['type'] != null
-                ? RScanBarType.values[map['type'] as int]
-                : null,
-            message: map['message'] as String,
-            points: map['points'] != null
-                ? (map['points'] as List)
-                    .map(
-                      (data) => RScanPoint(
-                        data['X'],
-                        data['Y'],
-                      ),
-                    )
-                    .toList()
-                : null,
-          );
-  }
-
-  @override
-  String toString() {
-    return 'RScanResult{type: $type, message: $message, points: $points}';
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RScanResult &&
-          runtimeType == other.runtimeType &&
-          type == other.type &&
-          message == other.message &&
-          points == other.points;
-
-  @override
-  int get hashCode => type.hashCode ^ message.hashCode ^ points.hashCode;
 }

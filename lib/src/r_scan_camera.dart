@@ -7,17 +7,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:r_scan/r_scan.dart';
 
-const _scanType = 'com.rhyme_lph/r_scan_camera';
-final MethodChannel _channel = const MethodChannel('$_scanType/method');
+const String _scanType = 'com.rhyme_lph/r_scan_camera';
+const MethodChannel _channel = MethodChannel('$_scanType/method');
 
 Future<List<RScanCameraDescription>> availableRScanCameras() async {
   try {
-    final List<Map<dynamic, dynamic>> cameras = await _channel
-        .invokeListMethod<Map<dynamic, dynamic>>('availableCameras');
+    final List<Map<dynamic, dynamic>> cameras =
+        (await _channel.invokeListMethod<Map<dynamic, dynamic>>(
+      'availableCameras',
+    ))!;
     return cameras.map((Map<dynamic, dynamic> camera) {
       return RScanCameraDescription(
-        name: camera['name'],
-        lensDirection: _parseCameraLensDirection(camera['lensFacing']),
+        name: camera['name'] as String,
+        lensDirection:
+            _parseCameraLensDirection(camera['lensFacing'] as String),
       );
     }).toList();
   } on PlatformException catch (e) {
@@ -26,86 +29,104 @@ Future<List<RScanCameraDescription>> availableRScanCameras() async {
 }
 
 class RScanCameraController extends ValueNotifier<RScanCameraValue> {
+  RScanCameraController(
+    this.description,
+    this.resolutionPreset,
+  ) : super(const RScanCameraValue.uninitialized());
+
   final RScanCameraDescription description;
   final RScanCameraResolutionPreset resolutionPreset;
-  RScanResult result; // qr code result
-  int _textureId; // init finish will return id
-  bool _isDisposed = false; // when the widget dispose will set true
-  Completer<void> _creatingCompleter; // when the camera create finish
-  StreamSubscription<dynamic> _resultSubscription; //the result subscription
 
-  RScanCameraController(this.description, this.resolutionPreset)
-      : super(const RScanCameraValue.uninitialized());
+  /// Qr code result.
+  RScanResult? result;
+
+  /// Init finish will return id.
+  int? _textureId;
+
+  /// When the widget dispose will set true.
+  bool _isDisposed = false;
+
+  /// When the camera create finish
+  late Completer<void> _creatingCompleter;
+
+  /// The result subscription
+  StreamSubscription<Map<String, dynamic>>? _resultSubscription;
 
   Future<void> initialize() async {
-    if (_isDisposed) return Future<void>.value();
+    if (_isDisposed) {
+      return;
+    }
 
     _creatingCompleter = Completer<void>();
 
     try {
       final Map<String, dynamic> reply =
-          await _channel.invokeMapMethod('initialize', <String, dynamic>{
-        'cameraName': description.name,
-        'resolutionPreset': _serializeResolutionPreset(resolutionPreset),
-      });
-      _textureId = reply['textureId'];
+          (await _channel.invokeMapMethod<String, dynamic>(
+        'initialize',
+        <String, dynamic>{
+          'cameraName': description.name,
+          'resolutionPreset': _serializeResolutionPreset(resolutionPreset),
+        },
+      ))!;
+      _textureId = reply['textureId'] as int;
       value = value.copyWith(
-          isInitialized: true,
-          previewSize: Size(reply['previewWidth'].toDouble(),
-              reply['previewHeight'].toDouble()));
+        isInitialized: true,
+        previewSize: Size(
+          (reply['previewWidth'] as int).toDouble(),
+          (reply['previewHeight'] as int).toDouble(),
+        ),
+      );
       _resultSubscription = EventChannel('${_scanType}_$_textureId/event')
           .receiveBroadcastStream()
+          .cast<Map<String, dynamic>>()
           .listen(_handleResult);
     } on PlatformException catch (e) {
-      //当发生权限问题的异常时会抛出
+      // 当发生权限问题的异常时会抛出
       throw RScanCameraException(e.code, e.message);
     }
     _creatingCompleter.complete();
     return _creatingCompleter.future;
   }
 
-  //处理返回值
-  void _handleResult(event) {
-    if (_isDisposed) return;
-    this.result = RScanResult.formMap(event);
+  /// 处理返回值
+  void _handleResult(Map<String, dynamic> event) {
+    if (_isDisposed) {
+      return;
+    }
+    result = RScanResult.formMap(event);
     notifyListeners();
   }
 
-  //开始扫描
-  Future<void> startScan() async {
-    await _channel.invokeMethod('startScan');
-  }
+  /// 开始扫描
+  Future<void> startScan() => _channel.invokeMethod('startScan');
 
-  //停止扫描
-  Future<void> stopScan() async {
-    await _channel.invokeMethod('stopScan');
-  }
+  /// 停止扫描
+  Future<void> stopScan() => _channel.invokeMethod<void>('stopScan');
 
   /// flash mode open or close.
   ///
   /// [isOpen] if false will close flash mode.
   ///
   /// It will return is success.
-  Future<bool> setFlashMode(bool isOpen) async =>
-      await _channel.invokeMethod('setFlashMode', {
-        'isOpen': isOpen,
-      });
+  Future<bool?> setFlashMode(bool isOpen) => _channel.invokeMethod(
+        'setFlashMode',
+        <String, dynamic>{'isOpen': isOpen},
+      );
 
   /// flash mode open or close.
   ///
   /// [isOpen] if false will close flash mode.
   ///
   /// It will return is success.
-  Future<bool> getFlashMode() async =>
-      await _channel.invokeMethod('getFlashMode');
+  Future<bool?> getFlashMode() => _channel.invokeMethod('getFlashMode');
 
   /// flash auto open when brightness value less then 600.
   ///
   /// [isAuto] auto
-  Future<bool> setAutoFlashMode(bool isAuto) async =>
-      await _channel.invokeMethod('setAutoFlashMode', {
-        'isAuto': isAuto,
-      });
+  Future<bool?> setAutoFlashMode(bool isAuto) => _channel.invokeMethod(
+        'setAutoFlashMode',
+        <String, dynamic>{'isAuto': isAuto},
+      );
 
   @override
   Future<void> dispose() async {
@@ -114,38 +135,49 @@ class RScanCameraController extends ValueNotifier<RScanCameraValue> {
     }
     _isDisposed = true;
     super.dispose();
-    if (_creatingCompleter != null) {
-      await _creatingCompleter.future;
-      await _channel.invokeMethod('dispose', <String, dynamic>{
-        'textureId': _textureId,
-      });
-      await _resultSubscription?.cancel();
-    }
+    await _creatingCompleter.future;
+    await _channel.invokeMethod<dynamic>('dispose', <String, dynamic>{
+      'textureId': _textureId,
+    });
+    await _resultSubscription?.cancel();
   }
 }
 
 /// camera value info
 class RScanCameraValue {
+  const RScanCameraValue({
+    required this.isInitialized,
+    this.errorDescription,
+    this.previewSize,
+  });
+
+  const RScanCameraValue.uninitialized() : this(isInitialized: false);
+
+  /// True after [RScanCameraController.initialize] has completed successfully.
   final bool isInitialized;
-  final String errorDescription;
-  final Size previewSize;
 
-  const RScanCameraValue(
-      {this.isInitialized, this.errorDescription, this.previewSize});
+  /// Description of an error state.
+  ///
+  /// This is null while the controller is not in an error state.
+  /// When [hasError] is true this contains the error description.
+  final String? errorDescription;
 
-  const RScanCameraValue.uninitialized()
-      : this(
-          isInitialized: false,
-        );
+  /// The size of the preview in pixels.
+  ///
+  /// Is `null` until [isInitialized] is `true`.
+  final Size? previewSize;
 
-  double get aspectRatio => previewSize.height / previewSize.width;
+  /// Convenience getter for `previewSize.width / previewSize.height`.
+  ///
+  /// Can only be called when [initialize] is done.
+  double get aspectRatio => previewSize!.width / previewSize!.height;
 
   bool get hasError => errorDescription != null;
 
   RScanCameraValue copyWith({
-    bool isInitialized,
-    String errorDescription,
-    Size previewSize,
+    bool? isInitialized,
+    String? errorDescription,
+    Size? previewSize,
   }) {
     return RScanCameraValue(
       isInitialized: isInitialized ?? this.isInitialized,
@@ -156,55 +188,56 @@ class RScanCameraValue {
 
   @override
   String toString() {
-    return '$runtimeType('
+    return '$runtimeType ('
         'isInitialized: $isInitialized, '
         'errorDescription: $errorDescription, '
-        'previewSize: $previewSize)';
+        'previewSize: $previewSize'
+        ')';
   }
 }
 
 class RScanCamera extends StatelessWidget {
-  final RScanCameraController controller;
+  const RScanCamera(
+    this.controller, {
+    Key? key,
+  }) : super(key: key);
 
-  const RScanCamera(this.controller, {Key key}) : super(key: key);
+  final RScanCameraController controller;
 
   @override
   Widget build(BuildContext context) {
     return controller.value.isInitialized
-        ? Texture(textureId: controller._textureId)
-        : Container();
+        ? Texture(textureId: controller._textureId!)
+        : const SizedBox.shrink();
   }
 }
 
-/// camera description
+/// Camera description
+@immutable
 class RScanCameraDescription {
-  RScanCameraDescription({
-    this.name,
-    this.lensDirection,
+  const RScanCameraDescription({
+    required this.name,
+    required this.lensDirection,
   });
 
   final String name;
   final RScanCameraLensDirection lensDirection;
 
   @override
-  bool operator ==(Object o) {
-    return o is RScanCameraDescription &&
-        o.name == name &&
-        o.lensDirection == lensDirection;
+  bool operator ==(Object other) {
+    return other is RScanCameraDescription &&
+        other.name == name &&
+        other.lensDirection == lensDirection;
   }
 
   @override
-  int get hashCode {
-    return hashValues(name, lensDirection);
-  }
+  int get hashCode => hashValues(name, lensDirection);
 
   @override
-  String toString() {
-    return '$runtimeType($name, $lensDirection)';
-  }
+  String toString() => '$runtimeType($name, $lensDirection)';
 }
 
-/// camera lens direction
+/// Camera lens direction
 enum RScanCameraLensDirection { front, back, external }
 
 RScanCameraLensDirection _parseCameraLensDirection(String string) {
@@ -244,7 +277,8 @@ enum RScanCameraResolutionPreset {
 
 /// Returns the resolution preset as a String.
 String _serializeResolutionPreset(
-    RScanCameraResolutionPreset resolutionPreset) {
+  RScanCameraResolutionPreset resolutionPreset,
+) {
   switch (resolutionPreset) {
     case RScanCameraResolutionPreset.max:
       return 'max';
@@ -259,16 +293,16 @@ String _serializeResolutionPreset(
     case RScanCameraResolutionPreset.low:
       return 'low';
   }
-  throw ArgumentError('Unknown ResolutionPreset value');
 }
 
-/// exception
+/// Exception
+@immutable
 class RScanCameraException implements Exception {
-  RScanCameraException(this.code, this.description);
+  const RScanCameraException(this.code, this.description);
 
-  String code;
-  String description;
+  final String code;
+  final String? description;
 
   @override
-  String toString() => '$runtimeType($code, $description)';
+  String toString() => '$runtimeType ($code, $description)';
 }
