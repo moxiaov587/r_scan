@@ -72,8 +72,8 @@ class RScanCameraController extends ValueNotifier<RScanCameraValue> {
       value = value.copyWith(
         isInitialized: true,
         previewSize: Size(
-          (reply['previewWidth'] as int).toDouble(),
-          (reply['previewHeight'] as int).toDouble(),
+          (reply['previewWidth'] as num).toDouble(),
+          (reply['previewHeight'] as num).toDouble(),
         ),
       );
       _resultSubscription = EventChannel('${_scanType}_$_textureId/event')
