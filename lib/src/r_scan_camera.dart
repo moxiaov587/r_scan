@@ -78,7 +78,8 @@ class RScanCameraController extends ValueNotifier<RScanCameraValue> {
       );
       _resultSubscription = EventChannel('${_scanType}_$_textureId/event')
           .receiveBroadcastStream()
-          .cast<Map<String, dynamic>>()
+          .map<Map<String, dynamic>>((dynamic event) =>
+              Map<String, dynamic>.from(event as Map<dynamic, dynamic>))
           .listen(_handleResult);
     } on PlatformException catch (e) {
       // 当发生权限问题的异常时会抛出
